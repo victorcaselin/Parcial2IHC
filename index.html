@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Preferencias de Color</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    #upload-section {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    #filters {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    canvas {
+      display: block;
+      margin: 20px auto;
+      max-width: 700px;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>Preferencias de Color</h1>
+
+  <div id="upload-section">
+    <label for="fileInput">Cargar archivo JSON:</label>
+    <input type="file" id="fileInput" accept=".json" />
+  </div>
+
+  <div id="filters">
+    <label><input type="checkbox" value="18-25" checked> 18-25</label>
+    <label><input type="checkbox" value="26-35" checked> 26-35</label>
+    <label><input type="checkbox" value="36-45" checked> 36-45</label>
+    <label><input type="checkbox" value="46+" checked> 46+</label>
+    <label><input type="checkbox" value="null" checked> Sin edad</label>
+  </div>
+
+  <canvas id="barChart"></canvas>
+  <canvas id="detailChart" style="display: none;"></canvas>
+
+  <script>
+    const colors = ['Rojo', 'Azul', 'Verde', 'Amarillo', 'Naranja', 'Morado'];
+    const ageGroups = ['18-25', '26-35', '36-45', '46+', 'null'];
+
+    const colorMap = {
+      'Rojo': '#e74c3c',
+      'Azul': '#3498db',
+      'Verde': '#2ecc71',
+      'Amarillo': '#f1c40f',
+      'Naranja': '#e67e22',
+      'Morado': '#9b59b6'
+    };
+
+    let rawData = [];
+    let grouped = {};
+    let barChart, detailChart;
+
+    function resetGrouped() {
+      grouped = {};
+      colors.forEach(color => {
+        grouped[color] = { '18-25': 0, '26-35': 0, '36-45': 0, '46+': 0, 'null': 0 };
+      });
+    }
+
+    function getActiveAges() {
+      return Array.from(document.querySelectorAll('#filters input:checked'))
+                  .map(cb => cb.value);
+    }
+
+    function processData(data) {
+      resetGrouped();
+      data.forEach(entry => {
+        const color = entry.color;
+        const edad = ageGroups.includes(entry.edad) ? entry.edad : 'null';
+        if (colors.includes(color)) {
+          grouped[color][edad]++;
+        }
+      });
+      renderMainChart();
+    }
+
+    function renderMainChart() {
+      const activeAges = getActiveAges();
+
+      const totals = colors.map(color =>
+        activeAges.reduce((sum, age) => sum + grouped[color][age], 0)
+      );
+
+      if (barChart) barChart.destroy();
+      barChart = new Chart(document.getElementById('barChart'), {
+        type: 'bar',
+        data: {
+          labels: colors,
+          datasets: [{
+            label: 'Total por Color',
+            data: totals,
+            backgroundColor: colors.map(c => colorMap[c])
+          }]
+        },
+        options: {
+          responsive: true,
+          onClick: (e, elements) => {
+            if (elements.length > 0) {
+              const index = elements[0].index;
+              const selectedColor = colors[index];
+              showDetailChart(selectedColor);
+            }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.label}: ${ctx.raw}`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function showDetailChart(color) {
+      const activeAges = getActiveAges();
+      const data = activeAges.map(age => grouped[color][age]);
+
+      if (detailChart) detailChart.destroy();
+      detailChart = new Chart(document.getElementById('detailChart'), {
+        type: 'pie',
+        data: {
+          labels: activeAges,
+          datasets: [{
+            data: data,
+            backgroundColor: activeAges.map((_, i) => ['#f39c12', '#8e44ad', '#3498db', '#2ecc71', '#95a5a6'][i % 5])
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: `Distribución por Edad de "${color}"`
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.label}: ${ctx.raw}`
+              }
+            }
+          }
+        }
+      });
+      document.getElementById('detailChart').style.display = 'block';
+    }
+
+    document.querySelectorAll('#filters input').forEach(cb => {
+      cb.addEventListener('change', renderMainChart);
+    });
+
+    document.getElementById('fileInput').addEventListener('change', function (event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const json = JSON.parse(e.target.result);
+          rawData = json;
+          processData(rawData);
+        } catch (err) {
+          alert("El archivo no contiene un JSON válido.");
+        }
+      };
+      reader.readAsText(file);
+    });
+  </script>
+</body>
+</html>
